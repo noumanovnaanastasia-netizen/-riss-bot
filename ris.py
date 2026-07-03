@@ -4,7 +4,7 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 
 # ТОКЕН: Убедитесь, что внутри кавычек вставлен ваш реальный токен из Telegram!
-TOKEN = "СЮДА_ВСТАВЬТЕ_ВАШ_ТОКЕН_ОТ_BOTFATHER"
+TOKEN = "8233072384:AAHm8Lc62SJDlRDLqnyx0x7Ls1Ikyj3myGk"
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
