@@ -1,10 +1,10 @@
+import asyncio
 import time
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 
-# ТОКЕН: Перевыпустите его в @BotFather и вставьте внутрь кавычек ниже.
-# Старый токен со скриншота больше использовать нельзя, так как его увидели посторонние.
-TOKEN = "СЮДА_ВСТАВЬТЕ_НОВЫЙ_ТОКЕН"
+# ТОКЕН: Убедитесь, что внутри кавычек вставлен ваш реальный токен из Telegram!
+TOKEN = "СЮДА_ВСТАВЬТЕ_ВАШ_ТОКЕН_ОТ_BOTFATHER"
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -36,3 +36,9 @@ async def daily(message: types.Message):
     user_data["last"] = now
     await message.answer("🌾 Вы получили ежедневную награду: 100 риса!")
 
+# ГЛАВНЫЙ БЛОК ЗАПУСКА БОТА
+async def main():
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
