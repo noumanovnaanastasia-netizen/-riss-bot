@@ -10,12 +10,22 @@ bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
 # Временный словарь для хранения баланса пользователей в памяти
-users = {}
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
 @dp.message(Command("start"))
 async def start(message: types.Message):
     users.setdefault(message.from_user.id, {"rice": 0, "last": 0})
-    await message.answer("Бот риса запущен 🍚")
+    
+    # Создаем кнопки меню для телефона
+    menu_keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="/daily"), KeyboardButton(text="/balance")]
+        ],
+        resize_keyboard=True # Делает кнопки аккуратными и маленькими
+    )
+    
+    await message.answer("Бот риса запущен 🍚", reply_markup=menu_keyboard)
+
 
 @dp.message(Command("balance"))
 async def balance(message: types.Message):
