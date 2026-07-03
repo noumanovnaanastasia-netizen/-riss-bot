@@ -5,8 +5,8 @@ import random
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 
-# ТОКЕН: Вставьте ваш секретный ключ от @BotFather (внутри кавычек)
-TOKEN = "8233072384:AAHm8Lc62SJDlRDLqnyx0x7Ls1Ikyj3myGk"
+# ТОКЕН: Вставьте ваш секретного бота ключ от @BotFather (внутри кавычек)
+TOKEN = "СЮДА_ВСТАВЬТЕ_ВАШ_ТОКЕН_ОТ_BOTFATHER"
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -47,12 +47,12 @@ def update_user_field(user_id, field, value):
     conn.commit()
     conn.close()
 
-# Клавиатура главного меню
+# Красивое меню без скобок
 menu_keyboard = types.ReplyKeyboardMarkup(
     keyboard=[
-        [types.KeyboardButton(text="🌾 Награда (/daily)"), types.KeyboardButton(text="💰 Баланс (/balance)")],
-        [types.KeyboardButton(text="🚜 Моя ферма (/farm)"), types.KeyboardButton(text="🎰 Казино (/casino)")],
-        [types.KeyboardButton(text="ℹ️ Помощь (/help)")]
+        [types.KeyboardButton(text="🌾 Награда"), types.KeyboardButton(text="💰 Баланс")],
+        [types.KeyboardButton(text="🚜 Моя ферма"), types.KeyboardButton(text="🎰 Казино")],
+        [types.KeyboardButton(text="ℹ️ Помощь")]
     ],
     resize_keyboard=True
 )
@@ -62,9 +62,8 @@ async def start(message: types.Message):
     get_user(message.from_user.id)
     await message.answer("🍚 Добро пожаловать в рисовую империю! Используйте меню ниже для игры.", reply_markup=menu_keyboard)
 
-# ТА САМАЯ КОМАНДА ПОМОЩИ
 @dp.message(Command("help"))
-@dp.message(lambda msg: msg.text == "ℹ️ Помощь (/help)")
+@dp.message(lambda msg: msg.text == "ℹ️ Помощь")
 async def help_cmd(message: types.Message):
     text = (
         "❓ **Как играть:**\n\n"
@@ -77,12 +76,11 @@ async def help_cmd(message: types.Message):
     await message.answer(text, parse_mode="Markdown")
 
 @dp.message(Command("balance"))
-@dp.message(lambda msg: msg.text == "💰 Баланс (/balance)")
+@dp.message(lambda msg: msg.text == "💰 Баланс")
 async def balance(message: types.Message):
     user_id = message.from_user.id
     user_data = get_user(user_id)
     
-    # Считаем пассивный доход
     now = int(time.time())
     hours_passed = (now - user_data["last_collect"]) // 3600
     pending_income = hours_passed * user_data["farms"] * 10
@@ -122,7 +120,7 @@ async def collect_rice_callback(callback_query: types.CallbackQuery):
     await callback_query.answer()
 
 @dp.message(Command("daily"))
-@dp.message(lambda msg: msg.text == "🌾 Награда (/daily)")
+@dp.message(lambda msg: msg.text == "🌾 Награда")
 async def daily(message: types.Message):
     user_id = message.from_user.id
     user_data = get_user(user_id)
@@ -139,12 +137,12 @@ async def daily(message: types.Message):
         return
 
     new_rice = user_data["rice"] + 100
-    update_user_field(user_id, "rice", new_rice)
+    update_user_field(user_id, "rice", user_data["rice"] + 100)
     update_user_field(user_id, "last_daily", now)
     await message.answer("🌾 Вы получили ежедневную награду: 100 риса!")
 
 @dp.message(Command("farm"))
-@dp.message(lambda msg: msg.text == "🚜 Моя ферма (/farm)")
+@dp.message(lambda msg: msg.text == "🚜 Моя ферма")
 async def farm(message: types.Message):
     user_id = message.from_user.id
     user_data = get_user(user_id)
@@ -179,6 +177,7 @@ async def buy_farm_callback(callback_query: types.CallbackQuery):
     await callback_query.answer()
 
 @dp.message(Command("casino"))
+@dp.message(lambda msg: msg.text == "🎰 Казино")
 async def casino(message: types.Message):
     user_id = message.from_user.id
     user_data = get_user(user_id)
