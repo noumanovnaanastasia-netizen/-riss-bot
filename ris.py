@@ -330,8 +330,7 @@ from aiogram.fsm.state import State, StatesGroup
 
 class RegistrationStates(StatesGroup):
     waiting_for_nickname = State()
-
-@dp.message(RegistrationStates.waiting_for_nickname)
+@dp.message()
 async def process_nickname(message: types.Message, state: FSMContext):
 
     nickname = message.text.strip()
