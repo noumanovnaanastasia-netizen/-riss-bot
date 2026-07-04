@@ -1,275 +1,270 @@
-import asyncio
-import sqlite3
-import random
+import json
 import time
-import logging
+import random
+from telegram import Update
+from telegram.ext import Application, CommandHandler, ContextTypes
 
-from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import CommandStart, Command
+TOKEN = "8962500881:AAFDttMSkEzQcSGUjljScWX6VpSbew67g58"
+DATA_FILE = "users.json"
 
-# ======================
-TOKEN = "8233072384:AAEd6QXeUxz6M5UV-v_0I3SXhpcDdWagDLY"
-# ======================
+# ---------------- LOAD DATA ----------------
+try:
+    with open(DATA_FILE, "r") as f:
+        users = json.load(f)
+except:
+    users = {}
 
-logging.basicConfig(level=logging.INFO)
+def save():
+    with open(DATA_FILE, "w") as f:
+        json.dump(users, f)
 
-bot = Bot(token=TOKEN)
-dp = Dispatcher()
+# ---------------- USER SYSTEM ----------------
+def get_user(user_id):
+    uid = str(user_id)
 
-DB = "game.db"
+    if uid not in users:
+        users[uid] = {
+            "money": 1000,
+            "xp": 0,
+            "level": 1,
+            "last_farm": 0
+        }
+        save()  # ✅ фикс: новый игрок сразу сохраняется
 
+    return users[uid]
 
-# ======================
-# DB
-# ======================
-def db():
-    return sqlite3.connect(DB)
+# ---------------- LEVEL SYSTEM ----------------
+def add_xp(user):
+    user["xp"] += 10
 
+    if user["xp"] >= user["level"] * 100:
+        user["xp"] = 0
+        user["level"] += 1
 
-def init_db():
-    conn = db()
-    c = conn.cursor()
+# ---------------- COMMANDS ----------------
 
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS users (
-        user_id INTEGER PRIMARY KEY,
-        nickname TEXT,
-        rice INTEGER DEFAULT 100,
-        xp INTEGER DEFAULT 0,
-        level INTEGER DEFAULT 1,
-        last_work INTEGER DEFAULT 0
-    )
-    """)
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    get_user(update.effective_user.id)
 
-    conn.commit()
-    conn.close()
-
-
-def get_user(uid):
-    conn = db()
-    c = conn.cursor()
-    c.execute("SELECT * FROM users WHERE user_id=?", (uid,))
-    row = c.fetchone()
-    conn.close()
-    return row
-
-
-def create_user(uid, name):
-    conn = db()
-    c = conn.cursor()
-    c.execute("INSERT OR IGNORE INTO users(user_id,nickname) VALUES(?,?)", (uid, name))
-    conn.commit()
-    conn.close()
-
-
-def update(uid, field, value):
-    conn = db()
-    c = conn.cursor()
-    c.execute(f"UPDATE users SET {field}=? WHERE user_id=?", (value, uid))
-    conn.commit()
-    conn.close()
-
-
-# ======================
-# XP SYSTEM
-# ======================
-def add_xp(uid, amount):
-    conn = db()
-    c = conn.cursor()
-
-    c.execute("SELECT xp, level FROM users WHERE user_id=?", (uid,))
-    xp, lvl = c.fetchone()
-
-    xp += amount
-    leveled = False
-
-    while xp >= lvl * 100:
-        xp -= lvl * 100
-        lvl += 1
-        leveled = True
-
-    c.execute("UPDATE users SET xp=?, level=? WHERE user_id=?", (xp, lvl, uid))
-    conn.commit()
-    conn.close()
-
-    return leveled, lvl
-
-
-# ======================
-# START
-# ======================
-@dp.message(CommandStart())
-async def start(msg: types.Message):
-    uid = msg.from_user.id
-
-    if not get_user(uid):
-        create_user(uid, msg.from_user.first_name)
-
-    kb = types.InlineKeyboardMarkup(inline_keyboard=[
-        [types.InlineKeyboardButton(text="🎮 Меню", callback_data="menu")]
-    ])
-
-    await msg.answer("🌾 Rice Empire v3", reply_markup=kb)
-
-
-# ======================
-# MENU
-# ======================
-@dp.callback_query(F.data == "menu")
-async def menu(cb: types.CallbackQuery):
-    kb = types.InlineKeyboardMarkup(inline_keyboard=[
-        [types.InlineKeyboardButton(text="🌾 Работа", callback_data="work")],
-        [types.InlineKeyboardButton(text="🎰 Казино", callback_data="casino")],
-        [types.InlineKeyboardButton(text="🎲 Кубик", callback_data="dice")],
-        [types.InlineKeyboardButton(text="🏪 Магазин", callback_data="shop")],
-        [types.InlineKeyboardButton(text="👤 Профиль", callback_data="profile")]
-    ])
-
-    await cb.message.edit_text("📌 Главное меню", reply_markup=kb)
-    await cb.answer()
-
-
-# ======================
-# PROFILE
-# ======================
-@dp.callback_query(F.data == "profile")
-async def profile(cb: types.CallbackQuery):
-    u = get_user(cb.from_user.id)
-
-    await cb.message.edit_text(
-        f"👤 {u[1]}\n🍙 Rice: {u[2]}\n⭐ LVL: {u[4]}\nXP: {u[3]}"
+    await update.message.reply_text(
+        "🌍 Mini Life Bot v2\n"
+        "💰 Экономика активна\n"
+        "Напиши /help"
     )
 
+async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "/balance\n"
+        "/farm\n"
+        "/dice\n"
+        "/guess <1-6>\n"
+        "/roulette\n"
+        "/rice up/down <bet>\n"
+        "/mine\n"
+        "/delivery\n"
+        "/business\n"
+        "/profile"
+    )
 
-# ======================
-# WORK
-# ======================
-@dp.callback_query(F.data == "work")
-async def work(cb: types.CallbackQuery):
-    uid = cb.from_user.id
-    u = get_user(uid)
+# ---------------- BALANCE ----------------
+async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = get_user(update.effective_user.id)
 
-    now = int(time.time())
-    if now - u[5] < 5:
-        return await cb.answer("⏳ Подожди")
+    await update.message.reply_text(
+        f"💰 {user['money']}$\n"
+        f"⭐ Level: {user['level']}\n"
+        f"XP: {user['xp']}"
+    )
 
-    earn = random.randint(50, 200)
+# ---------------- FARM ----------------
+async def farm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = get_user(update.effective_user.id)
 
-    update(uid, "rice", u[2] + earn)
-    update(uid, "last_work", now)
+    now = time.time()
 
-    add_xp(uid, 10)
+    if now - user["last_farm"] < 7200:
+        await update.message.reply_text("⏳ Подожди 2 часа")
+        return
 
-    await cb.answer(f"+{earn} 🍙", show_alert=True)
+    user["money"] += 1000
+    user["last_farm"] = now
 
+    add_xp(user)
+    save()
 
-# ======================
-# CASINO
-# ======================
-@dp.callback_query(F.data == "casino")
-async def casino_menu(cb: types.CallbackQuery):
-    await cb.message.answer("Используй: /casino 100")
-    await cb.answer()
+    await update.message.reply_text("🌾 +1000$")
 
-
-@dp.message(Command("casino"))
-async def casino(msg: types.Message):
-    uid = msg.from_user.id
-    u = get_user(uid)
-
-    args = msg.text.split()
-    if len(args) < 2:return await msg.answer("casino 100")
-
-    bet = int(args[1])
-
-    if bet > u[2]:
-        return await msg.answer("❌ нет денег")
-
-    if random.random() < 0.5:
-        update(uid, "rice", u[2] + bet)
-        add_xp(uid, 5)
-        await msg.answer(f"🎰 WIN +{bet}")
-    else:
-        update(uid, "rice", u[2] - bet)
-        await msg.answer(f"💀 LOSE -{bet}")
-
-
-# ======================
-# DICE
-# ======================
-@dp.callback_query(F.data == "dice")
-async def dice_menu(cb: types.CallbackQuery):
-    await cb.message.answer("Используй: /dice 100 3")
-    await cb.answer()
-
-
-@dp.message(Command("dice"))
-async def dice(msg: types.Message):
-    uid = msg.from_user.id
-    u = get_user(uid)
-
-    args = msg.text.split()
-    if len(args) < 3:
-        return await msg.answer("dice 100 3")
-
-    bet = int(args[1])
-    guess = int(args[2])
+# ---------------- DICE ----------------
+async def dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = get_user(update.effective_user.id)
 
     roll = random.randint(1, 6)
 
-    if guess == roll:
-        win = bet * 5
-        update(uid, "rice", u[2] + win)
-        await msg.answer(f"🎲 WIN {roll} +{win}")
+    if roll == 6:
+        user["money"] += 500
+        msg = "WIN +500$"
     else:
-        update(uid, "rice", u[2] - bet)
-        await msg.answer(f"🎲 LOSE {roll}")
+        user["money"] -= 100
+        msg = "LOSE -100$"
 
+    add_xp(user)
+    save()
 
-# ======================
-# SHOP (simple)
-# ======================
-@dp.callback_query(F.data == "shop")
-async def shop(cb: types.CallbackQuery):
-    kb = types.InlineKeyboardMarkup(inline_keyboard=[
-        [types.InlineKeyboardButton(text="🥤 Энергетик (1000)", callback_data="buy_drink")],
-        [types.InlineKeyboardButton(text="🛡 Амулет (2000)", callback_data="buy_amulet")],
-        [types.InlineKeyboardButton(text="🔙 Назад", callback_data="menu")]
-    ])
+    await update.message.reply_text(f"🎲 {roll} → {msg}")
 
-    await cb.message.edit_text("🏪 Магазин", reply_markup=kb)
+# ---------------- GUESS ----------------
+async def guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = get_user(update.effective_user.id)
 
+    if not context.args:
+        await update.message.reply_text("Используй: /guess 1-6")
+        return
 
-@dp.callback_query(F.data == "buy_drink")
-async def buy_drink(cb: types.CallbackQuery):
-    u = get_user(cb.from_user.id)
+    try:
+        choice = int(context.args[0])
+    except:
+        await update.message.reply_text("❌ Введи число 1-6")
+        return
 
-    if u[2] < 1000:
-        return await cb.answer("❌ нет денег", show_alert=True)
+    if choice < 1 or choice > 6:
+        await update.message.reply_text("❌ Только 1-6")
+        return
 
-    update(cb.from_user.id, "rice", u[2] - 1000)
-    await cb.answer("🥤 куплено")
+    target = random.randint(1, 6)
 
+    if choice == target:
+        user["money"] += 1000
+        msg = "WIN +1000$"
+    else:
+        user["money"] -= 200
+        msg = "LOSE -200$"
 
-@dp.callback_query(F.data == "buy_amulet")
-async def buy_amulet(cb: types.CallbackQuery):
-    u = get_user(cb.from_user.id)
+    add_xp(user)
+    save()
 
-    if u[2] < 2000:
-        return await cb.answer("❌ нет денег", show_alert=True)
+    await update.message.reply_text(f"❓ Было {target} → {msg}")
 
-    update(cb.from_user.id, "rice", u[2] - 2000)
-    await cb.answer("🛡 куплено")
+# ---------------- ROULETTE ----------------
+async def roulette(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = get_user(update.effective_user.id)
 
+    if random.choice([True, False]):
+        user["money"] += 800
+        msg = "WIN +800$"
+    else:
+        user["money"] -= 300
+        msg = "LOSE -300$"
 
-# ======================
-# RUN
-# ======================
-async def main():
-    init_db()
-    print("BOT STARTED")
-    await dp.start_polling(bot)
+    add_xp(user)
+    save()
 
+    await update.message.reply_text(f"🎰 {msg}")
+
+# ---------------- RICE MARKET ----------------
+async def rice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = get_user(update.effective_user.id)
+
+    if len(context.args) < 2:
+        await update.message.reply_text("Используй: /rice up 100")
+        return
+
+    direction = context.args[0]
+    if direction not in ["up", "down"]:
+        await update.message.reply_text("❌ up или down")
+        return
+
+    try:
+        bet = int(context.args[1])
+    except:
+        await update.message.reply_text("❌ ставка числом")
+        return
+
+    if bet <= 0:
+        await update.message.reply_text("❌ ставка > 0")
+        return
+
+    if user["money"] < bet:
+        await update.message.reply_text("❌ нет денег")
+        return
+
+    result = random.choice(["up", "down"])
+
+    if direction == result:
+        user["money"] += bet * 2
+        msg = f"WIN +{bet*2}$"
+    else:
+        user["money"] -= bet
+        msg = f"LOSE -{bet}$"
+
+    add_xp(user)
+    save()
+
+    await update.message.reply_text(f"📈 Было {result} → {msg}")
+
+# ---------------- WORKS ----------------
+async def mine(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = get_user(update.effective_user.id)
+
+    earn = random.randint(200, 800)
+    user["money"] += earn
+
+    add_xp(user)
+    save()
+
+    await update.message.reply_text(f"⛏ +{earn}$")
+
+async def delivery(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = get_user(update.effective_user.id)
+
+    earn = random.randint(300, 1000)
+    user["money"] += earn
+
+    add_xp(user)
+    save()
+
+    await update.message.reply_text(f"🚚 +{earn}$")
+
+async def business(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = get_user(update.effective_user.id)
+
+    earn = random.randint(500, 1500)
+    user["money"] += earn
+
+    add_xp(user)
+    save()
+
+    await update.message.reply_text(f"💼 +{earn}$")
+
+# ---------------- PROFILE ----------------
+async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = get_user(update.effective_user.id)
+
+    await update.message.reply_text(
+        f"📄 PROFILE\n"
+        f"💰 {user['money']}$\n"
+        f"⭐ Level {user['level']}\n"
+        f"XP {user['xp']}"
+    )
+
+# ---------------- MAIN ----------------
+def main():
+    app = Application.builder().token(TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_cmd))
+    app.add_handler(CommandHandler("balance", balance))
+    app.add_handler(CommandHandler("farm", farm))
+    app.add_handler(CommandHandler("dice", dice))
+    app.add_handler(CommandHandler("guess", guess))
+    app.add_handler(CommandHandler("roulette", roulette))
+    app.add_handler(CommandHandler("rice", rice))
+    app.add_handler(CommandHandler("mine", mine))
+    app.add_handler(CommandHandler("delivery", delivery))
+    app.add_handler(CommandHandler("business", business))
+    app.add_handler(CommandHandler("profile", profile))
+
+    print("Bot is running...")
+    app.run_polling()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
