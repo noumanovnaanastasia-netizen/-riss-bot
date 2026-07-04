@@ -174,8 +174,8 @@ async def profile(message: Message):
         parse_mode="HTML",
         reply_markup=keyboard
     )
-    @dispatcher.message(F.text == "🌾 Фарма")
-    async def farm(message: Message):
+@dispatcher.message(F.text == "🌾 Фарма")
+async def farm(message: Message):
 
     user = get_user(message.from_user.id)
 
