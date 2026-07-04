@@ -390,8 +390,12 @@ async def bonus_callback(callback: types.CallbackQuery):
         f"💰 Получено: **+{give_rice} 🍙**\n"
         f"{xp_msg}"
     )
-    await callback.message.edit_text(success_text, parse_mode="Markdown", reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="🔙 Назад", callback_data="to_main")]])
-    await callback.
+    await callback.message.edit_text(
+        success_text, 
+        parse_mode="Markdown", 
+        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="🔙 Назад", callback_data="to_main")]])
+    )
+    await callback.answer()
     
     # ==========================================
 # ИНВЕНТАРЬ ИМПЕРИИ
