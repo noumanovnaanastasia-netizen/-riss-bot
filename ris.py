@@ -1,331 +1,275 @@
 import asyncio
-import logging  # Добавили логирование, чтобы видеть ошибки
 import sqlite3
-import time
 import random
+import time
+import logging
 
+from aiogram import Bot, Dispatcher, types, F
+from aiogram.filters import CommandStart, Command
 
-from aiogram import Bot, Dispatcher, F
-from aiogram.filters import CommandStart
-from aiogram.types import (
-    Message,
-    KeyboardButton,
-    ReplyKeyboardMarkup
-)
+# ======================
+TOKEN = "PASTE_YOUR_TOKEN"
+# ======================
 
-# Включаем логирование в консоль
 logging.basicConfig(level=logging.INFO)
 
-# ==========================================================
-# НАСТРОЙКИ
-# ==========================================================
+bot = Bot(token=TOKEN)
+dp = Dispatcher()
 
-BOT_TOKEN = "8233072384:AAEd6QXeUxz6M5UV-v_0I3SXhpcDdWagDLY"         # <--- Вставьте сюда токен от @BotFather
-ADMIN_ID = 7303801260  # <--- Вставьте сюда свой числовой Telegram ID
+DB = "game.db"
 
-# ==========================================================
-# БАЗА ДАННЫХ SQLITE
-# ==========================================================
 
-# Добавили check_same_thread=False, чтобы база данных не выдавала ошибки при частых запросах
-database = sqlite3.connect("database.db", check_same_thread=False)
-cursor = database.cursor()
+# ======================
+# DB
+# ======================
+def db():
+    return sqlite3.connect(DB)
 
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS users (
-    telegram_id INTEGER PRIMARY KEY,
-    username TEXT,
-    coins INTEGER DEFAULT 0,
-    vip INTEGER DEFAULT 0,
-    luck INTEGER DEFAULT 0,
-    last_farm INTEGER DEFAULT 0
-)
-""")
-database.commit()
 
-# ==========================================================
-# BOT
-# ==========================================================
+def init_db():
+    conn = db()
+    c = conn.cursor()
 
-bot = Bot(token=BOT_TOKEN)
-dispatcher = Dispatcher()
-
-# ==========================================================
-# ФУНКЦИИ
-# ==========================================================
-
-def register_user(user):
-    """
-    Автоматическая регистрация пользователя.
-    """
-    cursor.execute(
-        "SELECT telegram_id FROM users WHERE telegram_id = ?",
-        (user.id,)
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        user_id INTEGER PRIMARY KEY,
+        nickname TEXT,
+        rice INTEGER DEFAULT 100,
+        xp INTEGER DEFAULT 0,
+        level INTEGER DEFAULT 1,
+        last_work INTEGER DEFAULT 0
     )
-    result = cursor.fetchone()
+    """)
 
-    if result is None:
-        # Если у пользователя нет юзернейма (@name), запишем "Пользователь"
-        username = user.username if user.username else "Пользователь"
-        
-        cursor.execute(
-            """
-            INSERT INTO users (telegram_id, username, coins, vip, luck, last_farm)
-            VALUES (?, ?, 0, 0, 0, 0)
-            """,
-            (user.id, username)
-        )
-        database.commit()
+    conn.commit()
+    conn.close()
 
 
-def get_main_keyboard(user_id: int) -> ReplyKeyboardMarkup:
-    """
-    Главное меню в клавиатуре (внизу экрана).
-    """
-    keyboard = [
-        [
-            KeyboardButton(text="👤 Профиль"),
-            KeyboardButton(text="🛒 Магазин")
-        ],
-        [
-            KeyboardButton(text="🎮 Мини-игры")
-        ]
-    ]
-
-    # Если это админ, добавляем ему кнопку админки
-    if user_id == ADMIN_ID:
-        keyboard.append([KeyboardButton(text="👑 Админка")])
-
-    return ReplyKeyboardMarkup(
-        keyboard=keyboard,
-        resize_keyboard=True
-    )
-
-# ==========================================================
-# КОМАНДА START
-# ==========================================================
-
-@dispatcher.message(CommandStart())
-async def start_command(message: Message):
-    register_user(message.from_user)
-    
-    await message.answer(
-        text=(
-            f"👋 Добро пожаловать, {message.from_user.full_name}!\n\n"
-            "Вы успешно зарегистрированы.\n"
-            "Используйте кнопки меню ниже."
-        ),
-        reply_markup=get_main_keyboard(message.from_user.id)
-    )
-
-# ==========================================================
-# ЗАПУСК
-# ==========================================================
-
-async def main():
-    print("Бот успешно запущен и готов к работе!")
-    await dispatcher.start_polling(bot)
+def get_user(uid):
+    conn = db()
+    c = conn.cursor()
+    c.execute("SELECT * FROM users WHERE user_id=?", (uid,))
+    row = c.fetchone()
+    conn.close()
+    return row
 
 
-if __name__ == "__main__":
-    asyncio.run(main())
-@dispatcher.message(F.text == "👤 Профиль")
-async def profile(message: Message):
+def create_user(uid, name):
+    conn = db()
+    c = conn.cursor()
+    c.execute("INSERT OR IGNORE INTO users(user_id,nickname) VALUES(?,?)", (uid, name))
+    conn.commit()
+    conn.close()
 
-    user = get_user(message.from_user.id)
 
-    coins = user[2]
-    vip = user[3]
+def update(uid, field, value):
+    conn = db()
+    c = conn.cursor()
+    c.execute(f"UPDATE users SET {field}=? WHERE user_id=?", (value, uid))
+    conn.commit()
+    conn.close()
 
-    if vip == 1:
-        status = "👑 VIP"
-    else:
-        status = "🙂 Обычный"
 
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[
-            [
-                KeyboardButton(text="🌾 Фарма")
-            ],
-            [
-                KeyboardButton(text="👤 Профиль"),
-                KeyboardButton(text="🛒 Магазин")
-            ],
-            [
-                KeyboardButton(text="🎮 Мини-игры")
-            ]
-        ],
-        resize_keyboard=True
+# ======================
+# XP SYSTEM
+# ======================
+def add_xp(uid, amount):
+    conn = db()
+    c = conn.cursor()
+
+    c.execute("SELECT xp, level FROM users WHERE user_id=?", (uid,))
+    xp, lvl = c.fetchone()
+
+    xp += amount
+    leveled = False
+
+    while xp >= lvl * 100:
+        xp -= lvl * 100
+        lvl += 1
+        leveled = True
+
+    c.execute("UPDATE users SET xp=?, level=? WHERE user_id=?", (xp, lvl, uid))
+    conn.commit()
+    conn.close()
+
+    return leveled, lvl
+
+
+# ======================
+# START
+# ======================
+@dp.message(CommandStart())
+async def start(msg: types.Message):
+    uid = msg.from_user.id
+
+    if not get_user(uid):
+        create_user(uid, msg.from_user.first_name)
+
+    kb = types.InlineKeyboardMarkup(inline_keyboard=[
+        [types.InlineKeyboardButton(text="🎮 Меню", callback_data="menu")]
+    ])
+
+    await msg.answer("🌾 Rice Empire v3", reply_markup=kb)
+
+
+# ======================
+# MENU
+# ======================
+@dp.callback_query(F.data == "menu")
+async def menu(cb: types.CallbackQuery):
+    kb = types.InlineKeyboardMarkup(inline_keyboard=[
+        [types.InlineKeyboardButton(text="🌾 Работа", callback_data="work")],
+        [types.InlineKeyboardButton(text="🎰 Казино", callback_data="casino")],
+        [types.InlineKeyboardButton(text="🎲 Кубик", callback_data="dice")],
+        [types.InlineKeyboardButton(text="🏪 Магазин", callback_data="shop")],
+        [types.InlineKeyboardButton(text="👤 Профиль", callback_data="profile")]
+    ])
+
+    await cb.message.edit_text("📌 Главное меню", reply_markup=kb)
+    await cb.answer()
+
+
+# ======================
+# PROFILE
+# ======================
+@dp.callback_query(F.data == "profile")
+async def profile(cb: types.CallbackQuery):
+    u = get_user(cb.from_user.id)
+
+    await cb.message.edit_text(
+        f"👤 {u[1]}\n🍙 Rice: {u[2]}\n⭐ LVL: {u[4]}\nXP: {u[3]}"
     )
 
-    if message.from_user.id == ADMIN_ID:
-        keyboard.keyboard.append(
-            [
-                KeyboardButton(text="👑 Админка")
-            ]
-        )
 
-    await message.answer(
-        text=(
-            "👤 <b>Ваш профиль</b>\n\n"
-            f"💰 Монет: <b>{coins}</b>\n"
-            f"⭐ Статус: <b>{status}</b>"
-        ),
-        parse_mode="HTML",
-        reply_markup=keyboard
-    )
-@dispatcher.message(F.text == "🌾 Фарма")
-async def farm(message: Message):
-    user = get_user(message.from_user.id)
-
-    coins = user[2]
-    vip = user[3]
-    last_farm = user[5]
+# ======================
+# WORK
+# ======================
+@dp.callback_query(F.data == "work")
+async def work(cb: types.CallbackQuery):
+    uid = cb.from_user.id
+    u = get_user(uid)
 
     now = int(time.time())
+    if now - u[5] < 5:
+        return await cb.answer("⏳ Подожди")
 
-    cooldown = 60
+    earn = random.randint(50, 200)
 
-    if now - last_farm < cooldown:
+    update(uid, "rice", u[2] + earn)
+    update(uid, "last_work", now)
 
-        seconds = cooldown - (now - last_farm)
+    add_xp(uid, 10)
 
-        await message.answer(
-            f"⏳ До следующей фармы осталось {seconds} сек."
-        )
-
-        return
-
-    reward = 10
-
-    if vip == 1:
-        reward *= 2
-
-    coins += reward
-
-    update_coins(
-        message.from_user.id,
-        coins
-    )
-
-    update_last_farm(
-        message.from_user.id,
-        now
-    )
-
-    await message.answer(
-        f"🌾 Вы получили {reward} монет!\n\n"
-        f"💰 Теперь у вас {coins} монет."
-    )
-    # ==========================================================
-# ПРОФИЛЬ
-# ==========================================================
-
-@dispatcher.message(F.text == "👤 Профиль")
-async def profile_handler(message: Message):
-    user = get_user(message.from_user.id)
-
-    if user is None:
-        register_user(message.from_user)
-        user = get_user(message.from_user.id)
-
-    username = message.from_user.full_name
-    coins = user[2]
-    vip = user[3]
-
-    status = "👑 VIP" if vip == 1 else "Обычный"
-
-    profile_keyboard = ReplyKeyboardMarkup(
-        keyboard=[
-            [
-                KeyboardButton(text="🌾 Фарма")
-            ],
-            [
-                KeyboardButton(text="🔙 Назад")
-            ]
-        ],
-        resize_keyboard=True
-    )
-
-    await message.answer(
-        text=(
-            f"👤 <b>Профиль</b>\n\n"
-            f"Имя: <b>{username}</b>\n"
-            f"💰 Монеты: <b>{coins}</b>\n"
-            f"⭐ Статус: <b>{status}</b>"
-        ),
-        parse_mode="HTML",
-        reply_markup=profile_keyboard
-    )
+    await cb.answer(f"+{earn} 🍙", show_alert=True)
 
 
-# ==========================================================
-# ФАРМА
-# ==========================================================
-
-@dispatcher.message(F.text == "🌾 Фарма")
-async def farm_handler(message: Message):
-    user = get_user(message.from_user.id)
-
-    if user is None:
-        register_user(message.from_user)
-        user = get_user(message.from_user.id)
-
-    coins = user[2]
-    vip = user[3]
-    last_farm = user[5]
-
-    current_time = int(time.time())
-
-    if current_time - last_farm < 60:
-        seconds_left = 60 - (current_time - last_farm)
-
-        await message.answer(
-            f"⏳ Фармить можно раз в минуту!\n"
-            f"Подожди еще {seconds_left} секунд."
-        )
-        return
-
-    reward = random.randint(10, 50)
-
-    if vip == 1:
-        reward *= 2
-
-        await message.answer(
-            "🔥 Благодаря VIP-статусу твоя награда удвоена!"
-        )
-
-    coins += reward
-
-    update_coins(
-        message.from_user.id,
-        coins
-    )
-
-    update_last_farm(
-        message.from_user.id,
-        current_time
-    )
-
-    await message.answer(
-        f"✅ Вы успешно сфармили {reward} монет!\n"
-        f"💰 Теперь у вас {coins} монет."
-    )
+# ======================
+# CASINO
+# ======================
+@dp.callback_query(F.data == "casino")
+async def casino_menu(cb: types.CallbackQuery):
+    await cb.message.answer("Используй: /casino 100")
+    await cb.answer()
 
 
-# ==========================================================
-# НАЗАД
-# ==========================================================
+@dp.message(Command("casino"))
+async def casino(msg: types.Message):
+    uid = msg.from_user.id
+    u = get_user(uid)
 
-@dispatcher.message(F.text == "🔙 Назад")
-async def back_handler(message: Message):
-    await message.answer(
-        "Главное меню:",
-        reply_markup=get_main_keyboard(message.from_user.id)
-    )
-    async def main():
-    print("Бот успешно запущен...")
-    await dispatcher.start_polling(bot)
+    args = msg.text.split()
+    if len(args) < 2:return await msg.answer("casino 100")
 
-if __name__ == "__main__":
+    bet = int(args[1])
+
+    if bet > u[2]:
+        return await msg.answer("❌ нет денег")
+
+    if random.random() < 0.5:
+        update(uid, "rice", u[2] + bet)
+        add_xp(uid, 5)
+        await msg.answer(f"🎰 WIN +{bet}")
+    else:
+        update(uid, "rice", u[2] - bet)
+        await msg.answer(f"💀 LOSE -{bet}")
+
+
+# ======================
+# DICE
+# ======================
+@dp.callback_query(F.data == "dice")
+async def dice_menu(cb: types.CallbackQuery):
+    await cb.message.answer("Используй: /dice 100 3")
+    await cb.answer()
+
+
+@dp.message(Command("dice"))
+async def dice(msg: types.Message):
+    uid = msg.from_user.id
+    u = get_user(uid)
+
+    args = msg.text.split()
+    if len(args) < 3:
+        return await msg.answer("dice 100 3")
+
+    bet = int(args[1])
+    guess = int(args[2])
+
+    roll = random.randint(1, 6)
+
+    if guess == roll:
+        win = bet * 5
+        update(uid, "rice", u[2] + win)
+        await msg.answer(f"🎲 WIN {roll} +{win}")
+    else:
+        update(uid, "rice", u[2] - bet)
+        await msg.answer(f"🎲 LOSE {roll}")
+
+
+# ======================
+# SHOP (simple)
+# ======================
+@dp.callback_query(F.data == "shop")
+async def shop(cb: types.CallbackQuery):
+    kb = types.InlineKeyboardMarkup(inline_keyboard=[
+        [types.InlineKeyboardButton(text="🥤 Энергетик (1000)", callback_data="buy_drink")],
+        [types.InlineKeyboardButton(text="🛡 Амулет (2000)", callback_data="buy_amulet")],
+        [types.InlineKeyboardButton(text="🔙 Назад", callback_data="menu")]
+    ])
+
+    await cb.message.edit_text("🏪 Магазин", reply_markup=kb)
+
+
+@dp.callback_query(F.data == "buy_drink")
+async def buy_drink(cb: types.CallbackQuery):
+    u = get_user(cb.from_user.id)
+
+    if u[2] < 1000:
+        return await cb.answer("❌ нет денег", show_alert=True)
+
+    update(cb.from_user.id, "rice", u[2] - 1000)
+    await cb.answer("🥤 куплено")
+
+
+@dp.callback_query(F.data == "buy_amulet")
+async def buy_amulet(cb: types.CallbackQuery):
+    u = get_user(cb.from_user.id)
+
+    if u[2] < 2000:
+        return await cb.answer("❌ нет денег", show_alert=True)
+
+    update(cb.from_user.id, "rice", u[2] - 2000)
+    await cb.answer("🛡 куплено")
+
+
+# ======================
+# RUN
+# ======================
+async def main():
+    init_db()
+    print("BOT STARTED")
+    await dp.start_polling(bot)
+
+
+if name == "__main__":
     asyncio.run(main())
