@@ -1019,7 +1019,8 @@ async def play_cookie_callback(callback: types.CallbackQuery):
     
     pred = random.choice(COOKIE_PREDICTIONS)
     now = int(time.time())
-    is_elite_vip = (data["vip_until"] > now) and (data["vip_days_bought"] in)
+    is_elite_vip = (data.get("vip_until") or 0) > now and data.get("is_elite") == 1
+
     
     msg_bonus = ""
     if pred["type"] == "rice":
