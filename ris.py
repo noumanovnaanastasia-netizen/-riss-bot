@@ -1340,7 +1340,8 @@ async def process_cooking_steps(callback: types.CallbackQuery, state: FSMContext
             return
             
         now = int(time.time())
-        is_elite_vip = (data["vip_until"] > now) and (data["vip_days_bought"] in)
+        is_elite_vip = (data.get("vip_until") or 0) > now and data.get("is_elite") == 1
+
         
         r_rice = 1500
         r_xp = 40
