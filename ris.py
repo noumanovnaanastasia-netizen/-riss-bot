@@ -321,10 +321,17 @@ async def cmd_start(message: types.Message, state: FSMContext):
             "Перед тем как начать копить богатства, строить заводы и участвовать в дуэлях, "
             "придумай свой **уникальный игровой никнейм**.\n\n"
             "✏️ _Введи никнейм прямо сейчас в ответном сообщении:_ ", 
-            parse_mode="Markdown"     
+            parse_mode="Markdown"  
         )
-@dp.message(StateFilter(RegistrationStates.waiting_for_nickname))
+        
+from aiogram.fsm.state import State, StatesGroup
+
+class RegistrationStates(StatesGroup):
+    waiting_for_nickname = State()
+
+@dp.message(RegistrationStates.waiting_for_nickname)
 async def process_nickname(message: types.Message, state: FSMContext):
+
     nickname = message.text.strip()
     if len(nickname) < 2 or len(nickname) > 20 or "/" in nickname:
         await message.answer("❌ Никнейм должен содержать от 2 до 20 символов и не иметь косых черт! Попробуй еще раз:")
