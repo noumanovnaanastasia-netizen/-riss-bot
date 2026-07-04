@@ -15,6 +15,13 @@ logging.basicConfig(level=logging.INFO)
 bot = Bot(token=TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
+from aiogram import BaseMiddleware
+
+@dp.update.middleware()
+async def debug_middleware(handler, event, data):
+    print("DEBUG EVENT:", event)
+    return await handler(event, data)
+    
 DB_NAME = "rice_empire.db"
 
 
