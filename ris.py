@@ -1040,8 +1040,8 @@ async def play_cookie_callback(callback: types.CallbackQuery):
         parse_mode="Markdown"
     )
     await callback.answer()
-# ==========================================
-# ОДИНОЧНЫЕ ИГРЫ: КУХНЯ И ЭКСПЕДИЦИЯ (ЧАСТЬ 2)
+# # ==========================================
+# ОДИНОЧНЫЕ ИГРЫ: КУХНЯ И ЭКСПЕДИЦИЯ (ИСПРАВЛЕНО)
 # ==========================================
 
 # --- 3. ОДИНОЧНАЯ ИГРА: РИСОВАЯ КУХНЯ ---
@@ -1051,7 +1051,6 @@ async def start_kitchen_callback(callback: types.CallbackQuery, state: FSMContex
     data = get_user_data(user_id)
     if not data or data["is_banned"] == 1: return
     
-    # Случайный выбор начинки, которую попросил гость
     guest_target = random.choice(["🐟 ЛОСОСЬ", "🦀 КРАБ", "🥑 АВОКАДО"])
     await state.set_state(GameStates.cooking_step)
     await state.update_data(step=1, target=guest_target)
@@ -1081,7 +1080,6 @@ async def process_cooking_steps(callback: types.CallbackQuery, state: FSMContext
     step = state_data.get("step")
     target = state_data.get("target")
     
-    # Шаг 1: Проверка промывки
     if step == 1:
         if action == "nowash":
             await state.clear()
@@ -1104,7 +1102,6 @@ async def process_cooking_steps(callback: types.CallbackQuery, state: FSMContext
         await callback.answer()
         return
 
-    # Шаг 2: Проверка огня (нужен средний)
     elif step == 2:
         if action in ["high", "low"]:
             await state.clear()
@@ -1128,7 +1125,6 @@ async def process_cooking_steps(callback: types.CallbackQuery, state: FSMContext
         await callback.answer()
         return
 
-    # Шаг 3: Проверка начинки
     elif step == 3:
         await state.clear()
         success = False
@@ -1141,9 +1137,8 @@ async def process_cooking_steps(callback: types.CallbackQuery, state: FSMContext
             await callback.answer()
             return
             
-        # Успешный крафт! Расчёт наград
         now = int(time.time())
-        is_elite_vip = (data["vip_until"] > now) and (data["vip_days_bought"] in)
+        is_elite_vip = (data["vip_until"] > now) and (data["vip_days_bought"] in (20, 30))
         
         r_rice = 1500
         r_xp = 40
@@ -1215,11 +1210,9 @@ async def process_cave_steps(callback: types.CallbackQuery, state: FSMContext):
         
     elif c_step == 2:
         await state.clear()
-        # Финал раскопок - Сбалансированный дроп + VIP буст 1.3х
         now = int(time.time())
-        is_elite_vip = (data["vip_until"] > now) and (data["vip_days_bought"] in)
+        is_elite_vip = (data["vip_until"] > now) and (data["vip_days_bought"] in (20, 30))
         
-        # 20% шанс провала (обвал), 80% - победа
         if random.random() < 0.20:
             straf = 150
             if data["rice"] < straf: straf = data["rice"]
@@ -1228,7 +1221,7 @@ async def process_cave_steps(callback: types.CallbackQuery, state: FSMContext):
             return
             
         r_rice = 1000
-        r_xp = 25  # Снизили до 25 по твоему правилу баланса!
+        r_xp = 25
         vip_text = ""
         
         if is_elite_vip:
