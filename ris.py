@@ -322,7 +322,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
             parse_mode="Markdown"     
         )
     class RegistrationStates:
-    waiting_for_nickname = "waiting_for_nickname"
+        waiting_for_nickname = "waiting_for_nickname"
 
         await state.set_state(RegistrationStates.waiting_for_nickname)
 
