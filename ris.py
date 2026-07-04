@@ -176,7 +176,6 @@ async def profile(message: Message):
     )
 @dispatcher.message(F.text == "🌾 Фарма")
 async def farm(message: Message):
-
     user = get_user(message.from_user.id)
 
     coins = user[2]
