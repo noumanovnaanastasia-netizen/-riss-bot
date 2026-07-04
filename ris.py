@@ -972,7 +972,8 @@ async def process_detective_answer(message: types.Message, state: FSMContext):
     await state.clear()
     
     now = int(time.time())
-    is_elite_vip = (data["vip_until"] > now) and (data["vip_days_bought"] in)
+is_elite_vip = (data.get("vip_until") or 0) > now and ...
+
     
     if user_answer == correct:
         r_rice = random.randint(300, 800)
