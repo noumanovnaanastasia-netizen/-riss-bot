@@ -972,7 +972,7 @@ async def process_detective_answer(message: types.Message, state: FSMContext):
     await state.clear()
     
     now = int(time.time())
-is_elite_vip = (data.get("vip_until") or 0) > now and data.get("is_elite") == 1
+    is_elite_vip = (data.get("vip_until") or 0) > now and data.get("is_elite") == 1
 
 
     
