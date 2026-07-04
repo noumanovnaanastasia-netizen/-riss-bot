@@ -8,6 +8,8 @@ from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.storage.memory import MemoryStorage
+class RegistrationStates:
+    waiting_for_nickname = "waiting_for_nickname"
 
 # 🔑 НАСТРОЙКИ ИМПЕРИИ: Вставь свой токен и свой личный ID из Telegram ниже
 TOKEN = "8233072384:AAEd6QXeUxz6M5UV-v_0I3SXhpcDdWagDLY"
@@ -321,10 +323,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
             "✏️ _Введи никнейм прямо сейчас в ответном сообщении:_ ", 
             parse_mode="Markdown"     
         )
-    class RegistrationStates:
-        waiting_for_nickname = "waiting_for_nickname"
-
-        await state.set_state(RegistrationStates.waiting_for_nickname)
+    await state.set_state(RegistrationStates.waiting_for_nickname)
 
 @dp.message(RegistrationStates.waiting_for_nickname)
 async def process_nickname(message: types.Message, state: FSMContext):
