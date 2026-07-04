@@ -8,8 +8,8 @@ from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.storage.memory import MemoryStorage
-class RegistrationStates:
-    waiting_for_nickname = "waiting_for_nickname"
+class RegistrationStates(StatesGroup):
+    waiting_for_nickname = State()
 
 # 🔑 НАСТРОЙКИ ИМПЕРИИ: Вставь свой токен и свой личный ID из Telegram ниже
 TOKEN = "8233072384:AAEd6QXeUxz6M5UV-v_0I3SXhpcDdWagDLY"
@@ -300,43 +300,57 @@ def admin_keyboard():
 # ==========================================
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message, state: FSMContext):
-    init_db()
+    # 1. Вызов инициализации БД остается на месте
+init_db()
+
+# 2. Оборачиваем код проверки пользователя в команду /start
+@dp.message(CommandStart())  # Сработает только на /start
+async def start_command(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     data = get_user_data(user_id)
     
     if data:
         if data["is_banned"] == 1:
-            await message.answer("❌ **Ты заблокирован в Рисовой Империи!**", parse_mode="Markdown")
+            await message.answer("❌ **Ты забанен!**")
             return
+        
         track_action(user_id)
         await message.answer(
-            f"👋 Приветствуем снова, **{data['nickname']}** в Рисовой Империи! 🍙\n"
-            f"Используй нижнее меню для управления рисовой базой:", 
-            parse_mode="Markdown", 
+            f"👋 Приветствуем снова, **{data['nickname']}**!\n"
+            f"Используй нижнее меню для управления.",
+            parse_mode="Markdown",
             reply_markup=main_keyboard(user_id)
         )
     else:
         await message.answer(
-            "👋 **Добро пожаловать в текстовую вселенную Рисовой Империи!** 🍙\n\n"
-            "Перед тем как начать копить богатства, строить заводы и участвовать в дуэлях, "
-            "придумай свой **уникальный игровой никнейм**.\n\n"
-            "✏️ _Введи никнейм прямо сейчас в ответном сообщении:_ ", 
-            parse_mode="Markdown"  
+            "👋 **Добро пожаловать в текстовую игру!**\n"
+            "Перед тем как начать копить богатства,\n"
+            "придумай свой **уникальный игровой никнейм**.\n"
+            "✏️ _Введи никнейм прямо сейчас в чат_:",
+            parse_mode="Markdown"
         )
-        await state.set_state(RegistrationStates.waiting_for_nickname)
+        # Включаем состояние ожидания ника
+        await state.set_state(GameStates.waiting_for_nickname)
 
-                
-from aiogram.fsm.state import State, StatesGroup
 
-class RegistrationStates(StatesGroup):
-    waiting_for_nickname = State()
-@dp.message()
+# 3. Переносим класс состояний чуть выше (или оставьте ваш, если он уже есть вверху)
+# class RegistrationStates(StatesGroup):
+#     waiting_for_nickname = State()
+
+# 4. Исправляем обработчик никнейма — добавляем фильтр состояния!
+@dp.message(GameStates.waiting_for_nickname)
 async def process_nickname(message: types.Message, state: FSMContext):
-
     nickname = message.text.strip()
-    if len(nickname) < 2 or len(nickname) > 20 or "/" in nickname:
-        await message.answer("❌ Никнейм должен содержать от 2 до 20 символов и не иметь косых черт! Попробуй еще раз:")
+    if len(nickname) < 2 or len(nickname) > 20:
+        await message.answer("❌ Никнейм должен быть от 2 до 20 символов!")
         return
+        
+    # ... тут ваш код записи нового пользователя в базу данных ...
+    # ... например: register_user(message.from_user.id, nickname) ...
+    
+    # СУПЕР ВАЖНО: сбрасываем состояние, чтобы бот снова реагировал на команды!
+    await state.clear()
+    await message.answer(f"🎉 Отлично! Твой ник **{nickname}** успешно зарегистрирован.")
         
     register_user(message.from_user.id, nickname)
     await state.clear()
