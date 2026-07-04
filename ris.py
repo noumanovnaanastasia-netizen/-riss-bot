@@ -10,7 +10,7 @@ from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.storage.memory import MemoryStorage
 
 # 🔑 НАСТРОЙКИ ИМПЕРИИ: Вставь свой токен и свой личный ID из Telegram ниже
-TOKEN = "СЮДА_ВСТАВЬТЕ_ВАШ_ТОКЕН_ОТ_BOTFATHER"
+TOKEN = "8233072384:AAEd6QXeUxz6M5UV-v_0I3SXhpcDdWagDLY"
 ADMIN_ID = 7303801260
 
  # <- Обязательно замени нули на свой ID (например: 54321098)
