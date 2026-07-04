@@ -321,10 +321,10 @@ async def cmd_start(message: types.Message, state: FSMContext):
             "✏️ _Введи никнейм прямо сейчас в ответном сообщении:_ ", 
             parse_mode="Markdown"     
         )
-class RegistrationStates:
+    class RegistrationStates:
     waiting_for_nickname = "waiting_for_nickname"
 
-        await state.set_state(RegistrationStates.waiting_for_nickname)
+    await state.set_state(RegistrationStates.waiting_for_nickname)
 
 @dp.message(RegistrationStates.waiting_for_nickname)
 async def process_nickname(message: types.Message, state: FSMContext):
