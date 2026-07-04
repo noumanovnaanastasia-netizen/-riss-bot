@@ -13,7 +13,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 # =========================
 # ТОКЕН БОТА
 # =========================
-TOKEN = "СЮДА_ВСТАВЬ_ТОКЕН"
+TOKEN = "8233072384:AAHm8Lc62SJDlRDLqnyx0x7Ls1Ikyj3myGk"
 
 # Логирование
 logging.basicConfig(level=logging.INFO)
