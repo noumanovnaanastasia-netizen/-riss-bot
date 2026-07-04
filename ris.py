@@ -1415,7 +1415,8 @@ async def process_cave_steps(callback: types.CallbackQuery, state: FSMContext):
     elif c_step == 2:
         await state.clear()
         now = int(time.time())
-        is_elite_vip = (data["vip_until"] > now) and (data["vip_days_bought"] in)
+        is_elite_vip = (data.get("vip_until") or 0) > now and data.get("is_elite") == 1
+
         
         if random.random() < 0.20:
             straf = 150
