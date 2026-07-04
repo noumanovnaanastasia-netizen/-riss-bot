@@ -323,7 +323,8 @@ async def cmd_start(message: types.Message, state: FSMContext):
             "✏️ _Введи никнейм прямо сейчас в ответном сообщении:_ ", 
             parse_mode="Markdown"  
         )
-        asyncio.create_task(state.set_state(RegistrationStates.waiting_for_nickname))
+        await state.set_state(RegistrationStates.waiting_for_nickname)
+
                 
 from aiogram.fsm.state import State, StatesGroup
 
