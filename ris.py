@@ -6,31 +6,29 @@ import logging
 
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart, Command
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.storage.memory import MemoryStorage
 
+# =====================
+TOKEN
+# =====================
 TOKEN = "8233072384:AAHm8Lc62SJDlRDLqnyx0x7Ls1Ikyj3myGk"
+
+logging.basicConfig(level=logging.INFO)
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
-DB = "rice_rpg.db"
-
-logging.basicConfig(level=logging.INFO)
+DB_NAME = "rice_empire.db"
 
 
-# =========================
-# DATABASE
-# =========================
-def conn():
-    return sqlite3.connect(DB)
-
-
+# =====================
+DB INIT
+# =====================
 def init_db():
-    c = conn().cursor()
+    conn = sqlite3.connect(DB_NAME)
+    cur = conn.cursor()
 
-    c.execute("""
+    cur.execute("""
     CREATE TABLE IF NOT EXISTS users (
         user_id INTEGER PRIMARY KEY,
         nickname TEXT,
@@ -43,12 +41,11 @@ def init_db():
         last_rob INTEGER DEFAULT 0,
         energy_until INTEGER DEFAULT 0,
         wins INTEGER DEFAULT 0,
-        losses INTEGER DEFAULT 0,
-        title TEXT DEFAULT 'Нет'
+        losses INTEGER DEFAULT 0
     )
     """)
 
-    c.execute("""
+    cur.execute("""
     CREATE TABLE IF NOT EXISTS inventory (
         user_id INTEGER PRIMARY KEY,
         energy_drink INTEGER DEFAULT 0,
@@ -59,175 +56,232 @@ def init_db():
     )
     """)
 
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS business (
-        user_id INTEGER PRIMARY KEY,
-        b1 INTEGER DEFAULT 0,
-        b2 INTEGER DEFAULT 0,
-        b3 INTEGER DEFAULT 0,
-        last_collect INTEGER DEFAULT 0
-    )
-    """)
-
-    conn().commit()
+    conn.commit()
+    conn.close()
 
 
-# =========================
-# CONFIG
-# =========================
-BUSINESS = {
-    "b1": ("🌱 Грядка", 500, 5),
-    "b2": ("🧺 Теплица", 2500, 30),
-    "b3": ("🏭 Фабрика", 10000, 130)
-}
+# =====================
+UTILS
+# =====================
+def get_user(user_id):
+    conn = sqlite3.connect(DB_NAME)
+    cur = conn.cursor()
 
-TITLES = {
-    2000: "🌱 Росток",
-    5000: "🌾 Рабочий",
-    15000: "🚜 Мастер",
-    50000: "🏯 Лорд",
-    100000: "👑 Бог риса"
-}
+    cur.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
+    u = cur.fetchone()
 
-
-# =========================
-# DB HELPERS
-# =========================
-def get(uid):
-    c = conn().cursor()
-
-    u = c.execute("SELECT * FROM users WHERE user_id=?", (uid,)).fetchone()
     if not u:
+        conn.close()
         return None
 
-    i = c.execute("SELECT * FROM inventory WHERE user_id=?", (uid,)).fetchone()
-    b = c.execute("SELECT * FROM business WHERE user_id=?", (uid,)).fetchone()
+    cur.execute("SELECT * FROM inventory WHERE user_id=?", (user_id,))
+    inv = cur.fetchone()
 
-    return u, i, b
+    conn.close()
+
+    return {
+        "user_id": u[0],
+        "nickname": u[1],
+        "rice": u[2],
+        "xp": u[3],
+        "level": u[4],
+        "vip_until": u[5],
+        "last_bonus": u[6],
+        "last_work": u[7],
+        "last_rob": u[8],
+        "energy_until": u[9],
+        "wins": u[10],
+        "losses": u[11],
+
+        "energy_drink": inv[1],
+        "amulet": inv[2],
+        "box1": inv[3],
+        "box2": inv[4],
+        "box3": inv[5],
+    }
 
 
-def create(uid, nick):
-    c = conn().cursor()
-    c.execute("INSERT OR IGNORE INTO users(user_id,nickname) VALUES(?,?)", (uid, nick))
-    c.execute("INSERT OR IGNORE INTO inventory(user_id) VALUES(?)", (uid,))
-    c.execute("INSERT OR IGNORE INTO business(user_id) VALUES(?)", (uid,))
-    conn().commit()
+def update(user_id, table, field, value):
+    conn = sqlite3.connect(DB_NAME)
+    cur = conn.cursor()
+    cur.execute(f"UPDATE {table} SET {field}=? WHERE user_id=?", (value, user_id))
+    conn.commit()
+    conn.close()
 
 
-def upd(table, field, value, uid):
-    c = conn().cursor()
-    c.execute(f"UPDATE {table} SET {field}=? WHERE user_id=?", (value, uid))
-    conn().commit()
+def register(user_id, nickname):
+    conn = sqlite3.connect(DB_NAME)
+    cur = conn.cursor()
+
+    cur.execute("INSERT OR REPLACE INTO users (user_id, nickname) VALUES (?,?)",
+                (user_id, nickname))
+
+    cur.execute("INSERT OR REPLACE INTO inventory (user_id) VALUES (?)",
+                (user_id,))
+
+    conn.commit()
+    conn.close()
 
 
-# =========================
-# FSM
-# =========================
-class Reg(StatesGroup):
-    nick = State()
+# =====================
+XP SYSTEM
+# =====================
+def add_xp(user_id, xp):
+    data = get_user(user_id)
+    if not data:
+        return ""
+
+    new_xp = data["xp"] + xp
+    lvl = data["level"]
+
+    while new_xp >= 50 and lvl < 25:
+        new_xp -= 50
+        lvl += 1
+
+    update(user_id, "users", "xp", new_xp)
+    update(user_id, "users", "level", lvl)
+
+    return f"+{xp} XP"
 
 
-# =========================
-# MENU
-# =========================
-def kb():
+# =====================
+KEYBOARD
+# =====================
+def menu():
     return types.InlineKeyboardMarkup(inline_keyboard=[
-        [types.InlineKeyboardButton("👤 Профиль", callback_data="profile")],
-        [types.InlineKeyboardButton("🏪 Магазин", callback_data="shop")],
-        [types.InlineKeyboardButton("🎮 Игры", callback_data="games")],
-        [types.InlineKeyboardButton("🎒 Инвентарь", callback_data="inv")]
+        [
+            types.InlineKeyboardButton(text="👤 Профиль", callback_data="profile"),
+            types.InlineKeyboardButton(text="🎮 Игры", callback_data="games")
+        ],
+        [
+            types.InlineKeyboardButton(text="🎒 Инвентарь", callback_data="inv")
+        ]
     ])
 
 
-# =========================
-# START
-# =========================
+# =====================
+START
+# =====================
 @dp.message(CommandStart())
-async def start(m: types.Message, state: FSMContext):
-    if not get(m.from_user.id):
-        create(m.from_user.id, m.from_user.first_name)
-        await m.answer("Введи ник:")
-        await state.set_state(Reg.nick)
+async def start(message: types.Message):
+    user = get_user(message.from_user.id)
+
+    if not user:
+        register(message.from_user.id, message.from_user.first_name)
+        await message.answer("Введите ник:")
         return
 
-    await m.answer("🏠 Меню", reply_markup=kb())
+    await message.answer("Добро пожаловать!", reply_markup=menu())
 
 
-@dp.message(Reg.nick)
-async def nick(m: types.Message, state: FSMContext):
-    create(m.from_user.id, m.text)
-    await state.clear()
-    await m.answer("Готово!", reply_markup=kb())
-
-
-# =========================
-# XP SYSTEM
-# =========================
-def add_xp(uid, amount):
-    u, i, b = get(uid)
-
-    xp = u[3] + amount
-    level = u[4]
-
-    leveled = False
-
-    while xp >= level * 50:
-        xp -= level * 50
-        level += 1
-        leveled = True
-
-        if level in TITLES:
-            upd("users", "title", TITLES[level], uid)
-
-    upd("users", "xp", xp, uid)
-    upd("users", "level", level, uid)
-
-    return leveled
-
-
-# =========================
-# PROFILE
-# =========================
+# =====================
+PROFILE
+# =====================
 @dp.callback_query(F.data == "profile")
 async def profile(c: types.CallbackQuery):
-    u, i, b = get(c.from_user.id)
+    u = get_user(c.from_user.id)
 
-    text = (
-        f"👤 {u[1]}\n"
-        f"🍙 {u[2]}\n"
-        f"⭐ XP {u[3]}\n"
-        f"📊 LVL {u[4]}\n"
-        f"🏅 {u[12]}\n"
-        f"👑 VIP {'YES' if u[5] > int(time.time()) else 'NO'}"
+    await c.message.edit_text(
+        f"👤 {u['nickname']}\n"
+        f"🍙 {u['rice']}\n"
+        f"⭐ LVL {u['level']}\n"
+        f"⚔️ Wins {u['wins']} | Loss {u['losses']}",
+        reply_markup=menu()
     )
 
-    await c.message.edit_text(text, reply_markup=kb())
+
+# =====================
+BONUS
+# =====================
+@dp.callback_query(F.data == "games")
+async def games(c: types.CallbackQuery):
+    await c.message.edit_text(
+        "🎮 Игры:\n/casino\n/dice\n/trade",
+        reply_markup=menu()
+    )
 
 
-# =========================
-# BONUS
-# =========================
-@dp.callback_query(F.data == "bonus")
-async def bonus(c: types.CallbackQuery):
-    u, _, _ = get(c.from_user.id)
-    now = int(time.time())
+# =====================
+CASINO
+# =====================
+@dp.message(Command("casino"))
+async def casino(message: types.Message):
+    u = get_user(message.from_user.id)
+    bet = int(message.text.split()[1])
 
-    if now - u[6] < 3600:
-        return await c.answer("КД", show_alert=True)
+    if u["rice"] < bet:
+        return await message.answer("нет денег")
 
-    reward = random.randint(200, 1200)
-
-    upd("users", "rice", u[2] + reward, u[0])
-    upd("users", "last_bonus", now, u[0])
-
-    add_xp(u[0], random.randint(5, 20))
-
-    await c.message.edit_text(f"+{reward} 🍙", reply_markup=kb())
+    if random.choice([True, False]):
+        update(u["user_id"], "users", "rice", u["rice"] + bet)
+        await message.answer(f"WIN +{bet}")
+    else:
+        update(u["user_id"], "users", "rice", u["rice"] - bet)
+        await message.answer(f"LOSE -{bet}")
 
 
-# =========================
-# WORK
-# =========================
+# =====================
+DICE
+# =====================
+@dp.message(Command("dice"))
+async def dice(message: types.Message):
+    u = get_user(message.from_user.id)
+    args = message.text.split()
+
+    bet = int(args[1])
+    guess = int(args[2])
+
+    roll = random.randint(1, 6)
+
+    if guess == roll:
+        update(u["user_id"], "users", "rice", u["rice"] + bet * 5)
+        await message.answer(f"WIN {roll}")
+    else:
+        update(u["user_id"], "users", "rice", u["rice"] - bet)
+        await message.answer(f"LOSE {roll}")
+
+
+# =====================
+TRADE
+# =====================
+@dp.message(Command("trade"))
+async def trade(message: types.Message):
+    u = get_user(message.from_user.id)
+
+    bet = int(message.text.split()[1])
+    choice = message.text.split()[2]
+
+    market = random.choice(["up", "down"])
+
+    if choice == market:
+        update(u["user_id"], "users", "rice", u["rice"] + bet)
+        await message.answer("WIN trade")
+    else:
+        update(u["user_id"], "users", "rice", u["rice"] - bet)
+        await message.answer("LOSE trade")
+
+
+# =====================
+WORK
+# =====================
 @dp.message(Command("work"))
-async def work(m: types.Message):
-    u, _,
+async def work(message: types.Message):
+    u = get_user(message.from_user.id)
+
+    earn = random.randint(100, 300)
+    update(u["user_id"], "users", "rice", u["rice"] + earn)
+
+    await message.answer(f"+{earn} 🍙")
+
+
+# =====================
+MAIN
+# =====================
+async def main():
+    init_db()
+    print("BOT STARTED")
+    await dp.start_polling(bot)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
