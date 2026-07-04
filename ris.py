@@ -319,8 +319,11 @@ async def cmd_start(message: types.Message, state: FSMContext):
             "Перед тем как начать копить богатства, строить заводы и участвовать в дуэлях, "
             "придумай свой **уникальный игровой никнейм**.\n\n"
             "✏️ _Введи никнейм прямо сейчас в ответном сообщении:_ ", 
-            parse_mode="Markdown"
+            parse_mode="Markdown"     
         )
+class RegistrationStates:
+    waiting_for_nickname = "waiting_for_nickname"
+
         await state.set_state(RegistrationStates.waiting_for_nickname)
 
 @dp.message(RegistrationStates.waiting_for_nickname)
