@@ -1,279 +1,97 @@
 import asyncio
-import time
-import random
+import logging
+import sqlite3
+from aiogram import Bot, Dispatcher, types
+from aiogram.filters import CommandStart
+from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
-from aiogram import Bot, Dispatcher, Router, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+# Токен вашего бота
+BOT_TOKEN = "8962500881:AAFDttMSkEzQcSGUjljScWX6VpSbew67g58"
 
-# =========================
-# ⚙️ НАСТРОЙКИ (ВСТАВЬ СЮДА)
-# =========================
-TOKEN = "8962500881:AAFDttMSkEzQcSGUjljScWX6VpSbew67g58"
-ADMIN_ID = 810004621
-
-
-bot = Bot(token=TOKEN)
+logging.basicConfig(level=logging.INFO)
+bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
-router = Router()
 
+# === РАБОТА С БАЗОЙ ДАННЫХ ===
+def init_db():
+    conn = sqlite3.connect("lifecycle.db")
+    cursor = conn.cursor()
+    # Создаем таблицу пользователей, если её нет
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            user_id INTEGER PRIMARY KEY,
+            username TEXT,
+            level INTEGER DEFAULT 1,
+            xp INTEGER DEFAULT 0,
+            bucks INTEGER DEFAULT 100,
+            has_house INTEGER DEFAULT 0,
+            has_business INTEGER DEFAULT 0
+        )
+    """)
+    conn.commit()
+    conn.close()
 
-# =========================
-# 🧠 ДАННЫЕ ПОЛЬЗОВАТЕЛЕЙ
-# =========================
-users = {}
+def get_user(user_id):
+    conn = sqlite3.connect("lifecycle.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT level, xp, bucks FROM users WHERE user_id = ?", (user_id,))
+    user = cursor.fetchone()
+    conn.close()
+    return user
 
-def get_user(uid: int):
-    if uid not in users:
-        users[uid] = {
-            "money": 0,
-            "xp": 0,
-            "level": 1,
-            "job": "Безработный",
-            "vip_until": 0,
-        }
-    return users[uid]
+def register_user(user_id, username):
+    conn = sqlite3.connect("lifecycle.db")
+    cursor = conn.cursor()
+    cursor.execute("INSERT OR IGNORE INTO users (user_id, username) VALUES (?, ?)", (user_id, username))
+    conn.commit()
+    conn.close()
 
+# === ГЛАВНОЕ МЕНЮ (НИЖНЯЯ КЛАВИАТУРА) ===
+def get_main_keyboard():
+    builder = ReplyKeyboardBuilder()
+    builder.row(types.KeyboardButton(text="👤 Мой Профиль"))
+    builder.row(types.KeyboardButton(text="💼 Работа / Игры"), types.KeyboardButton(text="🛒 Магазин"))
+    builder.row(types.KeyboardButton(text="🎟️ Brawl Pass"))
+    return builder.as_markup(resize_keyboard=True, input_field_placeholder="Выберите действие...")
 
-def level_bar(xp):
-    need = 50
-    cur = xp % need
-    filled = int((cur / need) * 5)
-    return "⬛" * filled + "⬜" * (5 - filled), cur, need
-
-
-# =========================
-# 📱 ГЛАВНОЕ МЕНЮ
-# =========================
-def main_menu():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💼 Работа", callback_data="work")],
-        [InlineKeyboardButton(text="🏪 Магазин", callback_data="shop")],
-        [InlineKeyboardButton(text="🎮 Игры", callback_data="games")],
-        [InlineKeyboardButton(text="🏠 Дома", callback_data="houses")],
-        [InlineKeyboardButton(text="🎒 Инвентарь", callback_data="inv")],
-        [InlineKeyboardButton(text="👤 Профиль", callback_data="profile")],
-        [InlineKeyboardButton(text="🔐 Админ", callback_data="admin")]
-    ])
-
-
-# =========================
-# /start
-# =========================
-@router.message(F.text == "/start")
-async def start(message: Message):
-    await message.answer(
-        "👋 Добро пожаловать в LIFE GAME BOT!\n\n"
-        "Ты начинаешь жизнь с нуля...\n"
-        "Работай 💼, зарабатывай 💰, развивайся 📈\n\n"
-        "Нажми кнопку ниже 👇",
-        reply_markup=main_menu()
+# === ОБРАБОТЧИКИ КОМАНД ===
+@dp.message(CommandStart())
+async def cmd_start(message: types.Message):
+    register_user(message.from_user.id, message.from_user.username)
+    
+    welcome_text = (
+        f"👋 *Приветствуем тебя в симуляторе жизни, {message.from_user.first_name}!* \n\n"
+        "🌍 Здесь тебе предстоит пройти путь от обычного работяги до владельца корпораций.\n"
+        "📈 Зарабатывай *Баксы*, копи *XP* (твои годы жизни), открывай бизнесы и дома!\n\n"
+        "👉 Нажимай на кнопки внизу, чтобы управлять своей жизнью!"
     )
+    await message.answer(welcome_text, parse_mode="Markdown", reply_markup=get_main_keyboard())
 
-
-# =========================
-# 👤 ПРОФИЛЬ
-# =========================
-@router.callback_query(F.data == "profile")
-async def profile(call: CallbackQuery):
-    u = get_user(call.from_user.id)
-
-    bar, cur, need = level_bar(u["xp"])
-    vip = "✅ ACTIVE" if u["vip_until"] > time.time() else "❌ NO VIP"
-
-    text = (
-        f"👤 ПРОФИЛЬ\n\n"
-        f"💰 Баланс: {u['money']} G\n"
-        f"💼 Работа: {u['job']}\n\n"
-        f"⭐ Level: {u['level']}\n"
-        f"📊 XP: {cur}/{need}\n"
-        f"{bar}\n\n"
-        f"🎫 VIP: {vip}"
+@dp.message(lambda m: m.text == "👤 Мой Профиль")
+async def show_profile(message: types.Message):
+    user_data = get_user(message.from_user.id)
+    if not user_data:
+        register_user(message.from_user.id, message.from_user.username)
+        user_data = get_user(message.from_user.id)
+        
+    level, xp, bucks = user_data
+    
+    profile_text = (
+        f"🌟 *Игровой профиль пользователя {message.from_user.first_name}* 🌟\n\n"
+         f"⏳ *Возраст (Уровень):* {level} лет\n"
+         f"✨ *Опыт (XP):* {xp} / {level * 50}\n"
+         f"💵 *Баланс:* {bucks} баксов\n\n"
+         f"🏠 *Недвижимость:* Появится с 15 уровня\n"
+         f"🏢 *Бизнес:* Появится с 10 уровня"
     )
+    await message.answer(profile_text, parse_mode="Markdown")
 
-    await call.message.edit_text(text, reply_markup=main_menu())
-
-
-# =========================
-# 💼 РАБОТА
-# =========================
-@router.callback_query(F.data == "work")
-async def work(call: CallbackQuery):
-    u = get_user(call.from_user.id)
-
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🚚 Доставщик +100G", callback_data="job_1")],
-        [InlineKeyboardButton(text="👨‍💻 Программист +200G", callback_data="job_2")],
-        [InlineKeyboardButton(text="❌ Уволиться", callback_data="job_leave")],
-        [InlineKeyboardButton(text="⬅ Назад", callback_data="menu")]
-    ])
-
-    await call.message.edit_text(
-        f"💼 РАБОТА\n\nТекущая: {u['job']}",
-        reply_markup=kb
-    )
-
-
-@router.callback_query(F.data.startswith("job_"))
-async def job(call: CallbackQuery):
-    u = get_user(call.from_user.id)
-
-    if call.data == "job_leave":
-        u["job"] = "Безработный"
-        await call.answer("Уволились")
-        return
-
-    if call.data == "job_1":
-        u["job"] = "Доставщик"
-        u["money"] += 100
-        u["xp"] += 5
-
-    if call.data == "job_2":
-        u["job"] = "Программист"
-        u["money"] += 200
-        u["xp"] += 10
-
-    await call.answer("Готово")
-
-
-# =========================
-# 🎮 ИГРЫ
-# =========================
-@router.callback_query(F.data == "games")
-async def games(call: CallbackQuery):
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎲 Угадай число", callback_data="game_guess")],
-        [InlineKeyboardButton(text="🎰 Казино", callback_data="game_casino")],
-        [InlineKeyboardButton(text="⚠ Риск", callback_data="game_risk")],
-        [InlineKeyboardButton(text="🕵️ Детектив", callback_data="game_detective")],
-        [InlineKeyboardButton(text="🔤 Анаграмма", callback_data="game_word")],
-        [InlineKeyboardButton(text="⬅ Назад", callback_data="menu")]
-    ])
-
-    await call.message.edit_text("🎮 ВЫБЕРИ ИГРУ:", reply_markup=kb)
-
-
-# =========================
-# 🎰 КАЗИНО
-# =========================
-@router.callback_query(F.data == "game_casino")
-async def casino(call: CallbackQuery):
-    u = get_user(call.from_user.id)
-
-    if random.choice([True, False]):
-        u["money"] += 200
-        await call.message.edit_text("🎰 Вы выиграли +200G")
-    else:
-        u["money"] -= 100
-        await call.message.edit_text("🎰 Вы проиграли -100G")
-
-
-# =========================
-# ⚠ РИСК
-# =========================
-@router.callback_query(F.data == "game_risk")
-async def risk(call: CallbackQuery):
-    u = get_user(call.from_user.id)
-
-    r = random.randint(1, 100)
-
-    if r < 40:
-        u["money"] += 300
-        await call.message.edit_text("⚠ УДАЧА +300G")
-    else:
-        u["money"] -= 200
-        await call.message.edit_text("⚠ ПРОВАЛ -200G")
-
-
-# =========================
-# 🕵️ ДЕТЕКТИВ
-# =========================
-@router.callback_query(F.data == "game_detective")
-async def detective(call: CallbackQuery):
-    u = get_user(call.from_user.id)
-
-    u["money"] += 150
-    u["xp"] += 10
-
-    await call.message.edit_text("🕵️ Дело раскрыто +150G")
-
-
-# =========================
-# 🔤 АНАМГРАММА
-# =========================
-@router.callback_query(F.data == "game_word")
-async def word(call: CallbackQuery):
-    u = get_user(call.from_user.id)
-
-    u["money"] += 120
-    u["xp"] += 8
-
-    await call.message.edit_text("🔤 Слово угадано +120G")
-
-
-# =========================
-# 🏪 МАГАЗИН
-# =========================
-@router.callback_query(F.data == "shop")
-async def shop(call: CallbackQuery):
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎫 VIP", callback_data="buy_vip")],
-        [InlineKeyboardButton(text="🏠 Квартира", callback_data="buy_house")],
-        [InlineKeyboardButton(text="⚡ Энергетик", callback_data="buy_energy")],
-        [InlineKeyboardButton(text="⬅ Назад", callback_data="menu")]
-    ])
-
-    await call.message.edit_text("🏪 МАГАЗИН", reply_markup=kb)
-
-
-# =========================
-# 🏠 ДОМА
-# =========================
-@router.callback_query(F.data == "houses")
-async def houses(call: CallbackQuery):
-    await call.message.edit_text("🏠 Дома будут расширены")
-
-
-# =========================
-# 🎒 ИНВЕНТАРЬ
-# =========================
-@router.callback_query(F.data == "inv")
-async def inv(call: CallbackQuery):
-    await call.message.edit_text("🎒 Инвентарь пуст")
-
-
-# =========================
-# 🔐 АДМИНКА
-# =========================
-@router.callback_query(F.data == "admin")
-async def admin(call: CallbackQuery):
-    if call.from_user.id != ADMIN_ID:
-        await call.answer("Нет доступа", show_alert=True)
-        return
-
-    await call.message.edit_text(
-        "🔐 АДМИНКА\n\n"
-        "Доступ:\n"
-        "/give_money\n"
-        "/give_xp\n"
-        "/give_vip"
-    )
-
-
-# =========================
-# 🔙 МЕНЮ
-# =========================
-@router.callback_query(F.data == "menu")
-async def menu(call: CallbackQuery):
-    await call.message.edit_text("Главное меню", reply_markup=main_menu())
-
-
-# =========================
-# RUN
-# =========================
+# === ЗАПУСК БОТА ===
 async def main():
-    dp.include_router(router)
+    init_db() # Запускаем базу данных при старте
+    print("Симулятор жизни успешно запущен в Amvera!")
     await dp.start_polling(bot)
-
 
 if __name__ == "__main__":
     asyncio.run(main())
+
