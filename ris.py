@@ -12,7 +12,7 @@ from aiogram.filters import Command
 # ⚙️ CONFIG
 # =====================
 
-TOKEN = "PASTE_YOUR_TOKEN_HERE"
+TOKEN = "8962500881:AAFDttMSkEzQcSGUjljScWX6VpSbew67g58"
 ADMIN_ID = 810004621  # 👈 ВСТАВЬ СВОЙ ID СЮДА
 
 DB = "game.db"
@@ -200,8 +200,7 @@ async def guess(message: Message):
 async def admin_panel(message: Message):
     if message.from_user.id != ADMIN_ID:810004621
 
-
-        return await message.answer("❌ Нет доступа")
+    return await message.answer("❌ Нет доступа")
 
     await message.answer(
         "👑 АДМИН ПАНЕЛЬ\n\n"
