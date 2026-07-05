@@ -1,247 +1,279 @@
 import asyncio
-import logging
-import random
 import time
-import aiosqlite
+import random
 
-from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message, CallbackQuery, ReplyKeyboardMarkup, KeyboardButton
-from aiogram.filters import Command
+from aiogram import Bot, Dispatcher, Router, F
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
-# =====================
-# ⚙️ CONFIG
-# =====================
-
+# =========================
+# ⚙️ НАСТРОЙКИ (ВСТАВЬ СЮДА)
+# =========================
 TOKEN = "8962500881:AAFDttMSkEzQcSGUjljScWX6VpSbew67g58"
-ADMIN_ID = 810004621  # 👈 ВСТАВЬ СВОЙ ID СЮДА
+ADMIN_ID = 810004621
 
-DB = "game.db"
-
-# =====================
-# LOGGING
-# =====================
-
-logging.basicConfig(level=logging.INFO)
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
+router = Router()
 
-# =====================
-# KEYBOARDS
-# =====================
 
-menu_kb = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="📊 Профиль"), KeyboardButton(text="💼 Работа")],
-        [KeyboardButton(text="🏢 Бизнес"), KeyboardButton(text="🏪 Магазин")],
-        [KeyboardButton(text="🎮 Мини-игры"), KeyboardButton(text="👑 Админ")]
-    ],
-    resize_keyboard=True
-)
+# =========================
+# 🧠 ДАННЫЕ ПОЛЬЗОВАТЕЛЕЙ
+# =========================
+users = {}
 
-# =====================
-# DB
-# =====================
+def get_user(uid: int):
+    if uid not in users:
+        users[uid] = {
+            "money": 0,
+            "xp": 0,
+            "level": 1,
+            "job": "Безработный",
+            "vip_until": 0,
+        }
+    return users[uid]
 
-async def init_db():
-    async with aiosqlite.connect(DB) as db:
-        await db.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            user_id INTEGER PRIMARY KEY,
-            money INTEGER DEFAULT 0,
-            xp INTEGER DEFAULT 0,
-            level INTEGER DEFAULT 1,
-            job TEXT DEFAULT 'none',
-            business_income INTEGER DEFAULT 0,
-            last_income INTEGER DEFAULT 0
-        )
-        """)
-        await db.commit()
 
-async def get_user(user_id: int):
-    async with aiosqlite.connect(DB) as db:
-        cur = await db.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
-        user = await cur.fetchone()
+def level_bar(xp):
+    need = 50
+    cur = xp % need
+    filled = int((cur / need) * 5)
+    return "⬛" * filled + "⬜" * (5 - filled), cur, need
 
-        if not user:
-            await db.execute("INSERT INTO users (user_id) VALUES (?)", (user_id,))
-            await db.commit()
-            return await get_user(user_id)
 
-        return user
+# =========================
+# 📱 ГЛАВНОЕ МЕНЮ
+# =========================
+def main_menu():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💼 Работа", callback_data="work")],
+        [InlineKeyboardButton(text="🏪 Магазин", callback_data="shop")],
+        [InlineKeyboardButton(text="🎮 Игры", callback_data="games")],
+        [InlineKeyboardButton(text="🏠 Дома", callback_data="houses")],
+        [InlineKeyboardButton(text="🎒 Инвентарь", callback_data="inv")],
+        [InlineKeyboardButton(text="👤 Профиль", callback_data="profile")],
+        [InlineKeyboardButton(text="🔐 Админ", callback_data="admin")]
+    ])
 
-async def update_user(user_id: int, field: str, value):
-    async with aiosqlite.connect(DB) as db:
-        await db.execute(f"UPDATE users SET {field}=? WHERE user_id=?", (value, user_id))
-        await db.commit()
 
-# =====================
-# LEVEL SYSTEM
-# =====================
-
-def xp_to_level(xp):
-    return max(1, xp // 100 + 1)
-
-# =====================
-# START
-# =====================
-
-@dp.message(Command("start"))
+# =========================
+# /start
+# =========================
+@router.message(F.text == "/start")
 async def start(message: Message):
-    await get_user(message.from_user.id)
     await message.answer(
-        "👋 Добро пожаловать в Life Game 2.0\n\nТы начинаешь с нуля. Развивайся!",
-        reply_markup=menu_kb
+        "👋 Добро пожаловать в LIFE GAME BOT!\n\n"
+        "Ты начинаешь жизнь с нуля...\n"
+        "Работай 💼, зарабатывай 💰, развивайся 📈\n\n"
+        "Нажми кнопку ниже 👇",
+        reply_markup=main_menu()
     )
 
-# =====================
-# PROFILE
-# =====================
 
-@dp.message(F.text == "📊 Профиль")
-async def profile(message: Message):
-    user = await get_user(message.from_user.id)
+# =========================
+# 👤 ПРОФИЛЬ
+# =========================
+@router.callback_query(F.data == "profile")
+async def profile(call: CallbackQuery):
+    u = get_user(call.from_user.id)
 
-    text = f"""
-📊 ТВОЙ ПРОФИЛЬ
+    bar, cur, need = level_bar(u["xp"])
+    vip = "✅ ACTIVE" if u["vip_until"] > time.time() else "❌ NO VIP"
 
-💰 Деньги: {user[1]}
-⭐ XP: {user[2]}
-📈 Уровень: {user[3]}
-💼 Работа: {user[4]}
-🏢 Доход бизнеса: {user[5]}/мин
-"""
-    await message.answer(text)
-
-# =====================
-# JOBS
-# =====================
-
-@dp.message(F.text == "💼 Работа")
-async def job_menu(message: Message):
-    await message.answer(
-        "💼 Работы:\n\n"
-        "1️⃣ Склад\n2️⃣ Доставка\n3️⃣ Уборщик\n\n"
-        "Напиши: работа 1 / 2 / 3"
+    text = (
+        f"👤 ПРОФИЛЬ\n\n"
+        f"💰 Баланс: {u['money']} G\n"
+        f"💼 Работа: {u['job']}\n\n"
+        f"⭐ Level: {u['level']}\n"
+        f"📊 XP: {cur}/{need}\n"
+        f"{bar}\n\n"
+        f"🎫 VIP: {vip}"
     )
 
-@dp.message(F.text.startswith("работа"))
-async def set_job(message: Message):
-    user_id = message.from_user.id
-    user = await get_user(user_id)
+    await call.message.edit_text(text, reply_markup=main_menu())
 
-    jobs = {
-        "1": "Склад",
-        "2": "Доставка",
-        "3": "Уборщик"
-    }
 
-    try:
-        choice = message.text.split()[1]
-        job = jobs.get(choice)
+# =========================
+# 💼 РАБОТА
+# =========================
+@router.callback_query(F.data == "work")
+async def work(call: CallbackQuery):
+    u = get_user(call.from_user.id)
 
-        if not job:
-            return await message.answer("❌ Нет такой работы")
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🚚 Доставщик +100G", callback_data="job_1")],
+        [InlineKeyboardButton(text="👨‍💻 Программист +200G", callback_data="job_2")],
+        [InlineKeyboardButton(text="❌ Уволиться", callback_data="job_leave")],
+        [InlineKeyboardButton(text="⬅ Назад", callback_data="menu")]
+    ])
 
-        await update_user(user_id, "job", job)
-        await message.answer(f"✅ Ты устроился: {job}")
-
-    except:
-        await message.answer("❌ Напиши: работа 1/2/3")
-
-# =====================
-# BUSINESS (PASSIVE INCOME)
-# =====================
-
-@dp.message(F.text == "🏢 Бизнес")
-async def business(message: Message):
-    user_id = message.from_user.id
-    user = await get_user(user_id)
-
-    income = user[5]
-
-    await message.answer(
-        f"🏢 Бизнес система\n\n"
-        f"💰 Доход: {income}/мин\n\n"
-        f"Пока доступно базовое начисление."
+    await call.message.edit_text(
+        f"💼 РАБОТА\n\nТекущая: {u['job']}",
+        reply_markup=kb
     )
 
-# =====================
-# MINI GAME
-# =====================
 
-@dp.message(F.text == "🎮 Мини-игры")
-async def mini_games(message: Message):
-    num = random.randint(1, 5)
-    await message.answer("🎮 Угадай число от 1 до 5")
+@router.callback_query(F.data.startswith("job_"))
+async def job(call: CallbackQuery):
+    u = get_user(call.from_user.id)
 
-    dp.current_number = num
-
-@dp.message()
-async def guess(message: Message):
-    if hasattr(dp, "current_number"):
-        try:
-            if int(message.text) == dp.current_number:
-                reward = random.randint(100, 1000)
-                await update_user(message.from_user.id, "money",
-                                  (await get_user(message.from_user.id))[1] + reward)
-
-                await message.answer(f"🎉 Победа! +{reward}$")
-            else:
-                await message.answer("❌ Неверно")
-        except:
-            pass
-
-# =====================
-# ADMIN
-# =====================
-
-@dp.message(F.text == "👑 Админ")
-async def admin_panel(message: Message):
-    if message.from_user.id != ADMIN_ID:810004621
-
-    return await message.answer("❌ Нет доступа")
-
-    await message.answer(
-        "👑 АДМИН ПАНЕЛЬ\n\n"
-        "Команды:\n"
-        "/add_money id amount\n"
-        "/add_xp id amount"
-    )
-
-@dp.message(Command("add_money"))
-async def add_money(message: Message):
-    if message.from_user.id != ADMIN_ID:
+    if call.data == "job_leave":
+        u["job"] = "Безработный"
+        await call.answer("Уволились")
         return
 
-    _, uid, amount = message.text.split()
-    user = await get_user(int(uid))
+    if call.data == "job_1":
+        u["job"] = "Доставщик"
+        u["money"] += 100
+        u["xp"] += 5
 
-    new_money = user[1] + int(amount)
-    await update_user(int(uid), "money", new_money)
+    if call.data == "job_2":
+        u["job"] = "Программист"
+        u["money"] += 200
+        u["xp"] += 10
 
-    await message.answer("✅ Деньги выданы")
+    await call.answer("Готово")
 
-@dp.message(Command("add_xp"))
-async def add_xp(message: Message):
-    if message.from_user.id != ADMIN_ID:
+
+# =========================
+# 🎮 ИГРЫ
+# =========================
+@router.callback_query(F.data == "games")
+async def games(call: CallbackQuery):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎲 Угадай число", callback_data="game_guess")],
+        [InlineKeyboardButton(text="🎰 Казино", callback_data="game_casino")],
+        [InlineKeyboardButton(text="⚠ Риск", callback_data="game_risk")],
+        [InlineKeyboardButton(text="🕵️ Детектив", callback_data="game_detective")],
+        [InlineKeyboardButton(text="🔤 Анаграмма", callback_data="game_word")],
+        [InlineKeyboardButton(text="⬅ Назад", callback_data="menu")]
+    ])
+
+    await call.message.edit_text("🎮 ВЫБЕРИ ИГРУ:", reply_markup=kb)
+
+
+# =========================
+# 🎰 КАЗИНО
+# =========================
+@router.callback_query(F.data == "game_casino")
+async def casino(call: CallbackQuery):
+    u = get_user(call.from_user.id)
+
+    if random.choice([True, False]):
+        u["money"] += 200
+        await call.message.edit_text("🎰 Вы выиграли +200G")
+    else:
+        u["money"] -= 100
+        await call.message.edit_text("🎰 Вы проиграли -100G")
+
+
+# =========================
+# ⚠ РИСК
+# =========================
+@router.callback_query(F.data == "game_risk")
+async def risk(call: CallbackQuery):
+    u = get_user(call.from_user.id)
+
+    r = random.randint(1, 100)
+
+    if r < 40:
+        u["money"] += 300
+        await call.message.edit_text("⚠ УДАЧА +300G")
+    else:
+        u["money"] -= 200
+        await call.message.edit_text("⚠ ПРОВАЛ -200G")
+
+
+# =========================
+# 🕵️ ДЕТЕКТИВ
+# =========================
+@router.callback_query(F.data == "game_detective")
+async def detective(call: CallbackQuery):
+    u = get_user(call.from_user.id)
+
+    u["money"] += 150
+    u["xp"] += 10
+
+    await call.message.edit_text("🕵️ Дело раскрыто +150G")
+
+
+# =========================
+# 🔤 АНАМГРАММА
+# =========================
+@router.callback_query(F.data == "game_word")
+async def word(call: CallbackQuery):
+    u = get_user(call.from_user.id)
+
+    u["money"] += 120
+    u["xp"] += 8
+
+    await call.message.edit_text("🔤 Слово угадано +120G")
+
+
+# =========================
+# 🏪 МАГАЗИН
+# =========================
+@router.callback_query(F.data == "shop")
+async def shop(call: CallbackQuery):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎫 VIP", callback_data="buy_vip")],
+        [InlineKeyboardButton(text="🏠 Квартира", callback_data="buy_house")],
+        [InlineKeyboardButton(text="⚡ Энергетик", callback_data="buy_energy")],
+        [InlineKeyboardButton(text="⬅ Назад", callback_data="menu")]
+    ])
+
+    await call.message.edit_text("🏪 МАГАЗИН", reply_markup=kb)
+
+
+# =========================
+# 🏠 ДОМА
+# =========================
+@router.callback_query(F.data == "houses")
+async def houses(call: CallbackQuery):
+    await call.message.edit_text("🏠 Дома будут расширены")
+
+
+# =========================
+# 🎒 ИНВЕНТАРЬ
+# =========================
+@router.callback_query(F.data == "inv")
+async def inv(call: CallbackQuery):
+    await call.message.edit_text("🎒 Инвентарь пуст")
+
+
+# =========================
+# 🔐 АДМИНКА
+# =========================
+@router.callback_query(F.data == "admin")
+async def admin(call: CallbackQuery):
+    if call.from_user.id != ADMIN_ID:
+        await call.answer("Нет доступа", show_alert=True)
         return
 
-    _, uid, amount = message.text.split()
-    user = await get_user(int(uid))
+    await call.message.edit_text(
+        "🔐 АДМИНКА\n\n"
+        "Доступ:\n"
+        "/give_money\n"
+        "/give_xp\n"
+        "/give_vip"
+    )
 
-    new_xp = user[2] + int(amount)
-    await update_user(int(uid), "xp", new_xp)
 
-    await message.answer("✅ XP выдано")
+# =========================
+# 🔙 МЕНЮ
+# =========================
+@router.callback_query(F.data == "menu")
+async def menu(call: CallbackQuery):
+    await call.message.edit_text("Главное меню", reply_markup=main_menu())
 
-# =====================
-# MAIN
-# =====================
 
+# =========================
+# RUN
+# =========================
 async def main():
-    await init_db()
+    dp.include_router(router)
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
