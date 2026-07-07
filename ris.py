@@ -999,12 +999,12 @@ async def play_slots(callback: CallbackQuery):
     await asyncio.sleep(2.5)
     
             # Выигрышные значения для ТГ-слотов: 1, 22, 43, 64 (три в ряд)
-    if msg.dice.value in:
+    if msg.dice.value in [1, 22, 43, 64]:
         win_amount = bet * 5
         cursor.execute("UPDATE users SET money = money + ? WHERE tg_id = ?", (win_amount, user_id))
         conn.commit()
         await msg.reply(f"🎉 **ДЖЕКПОТ!** Вы выиграли **${win_amount:,}**!", parse_mode="Markdown")
-    elif msg.dice.value in: # Хорошие комбинации (две одинаковые)
+    elif msg.dice.value in [16, 32, 48, 50]: # Хорошие комбинации (две одинаковые)
         win_amount = bet * 2
         cursor.execute("UPDATE users SET money = money + ? WHERE tg_id = ?", (win_amount, user_id))
         conn.commit()
