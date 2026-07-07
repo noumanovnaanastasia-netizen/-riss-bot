@@ -998,7 +998,7 @@ async def play_slots(callback: CallbackQuery):
     await callback.message.delete()
     await asyncio.sleep(2.5)
     
-    # Выигрышные значения для ТГ-слотов: 1, 22, 43, 64 (три в ряд)
+        # Выигрышные значения для ТГ-слотов: 1, 22, 43, 64 (три в ряд)
     if msg.dice.value in:
         win_amount = bet * 5
         cursor.execute("UPDATE users SET money = money + ? WHERE tg_id = ?", (win_amount, user_id))
