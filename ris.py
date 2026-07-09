@@ -1591,6 +1591,43 @@ async def shop_main_back(callback: CallbackQuery):
     await callback.message.delete()
     await callback.answer()
 
+# ==========================================
+# БЛОК: АВТОСАЛОН И МАШИНЫ (МИНИ-ЛАЙФ 2.0)
+# ==========================================
+
+CARS_MARKET = {
+    "lada": {"name": "🚗 ВАЗ-2107", "price": 50000, "bonus": 500},
+    "solaris": {"name": "🚘 Hyundai Solaris", "price": 150000, "bonus": 2000},
+    "camry": {"name": "🖤 Toyota Camry", "price": 500000, "bonus": 7000},
+    "porsche": {"name": "⚡ Porsche 911", "price": 2000000, "bonus": 30000}
+}
+
+@router.message(lambda message: message.text == "🚗 Автосалон" or message.text == "/cars")
+async def show_car_market(message: types.Message):
+    text = "🏬 *ДОБРО ПОЖАЛОВАТЬ В АВТОСАЛОН!* 🏬\n\n"
+    text += "Каждая машина увеличивает твой ежедневный доход (бонус к зарплате)!\n\n"
+    
+    for car_id, car_info in CARS_MARKET.items():
+        text += f"{car_info['name']}\n💰 Цена: {car_info['price']:,} руб.\n📈 Бонус: +{car_info['bonus']:,} руб./день\n"
+        text += f"Купить: /buy_car_{car_id}\n-------------------------\n"
+        
+    await message.reply(text, parse_mode="Markdown")
+
+@router.message(lambda message: message.text and message.text.startswith("/buy_car_"))
+async def buy_car(message: types.Message):
+    car_id = message.text.replace("/buy_car_", "").strip()
+    
+    if car_id not in CARS_MARKET:
+        await message.reply("❌ Такой машины нет в автосалоне!")
+        return
+        
+    car = CARS_MARKET[car_id]
+    
+    # Настоящую покупку с базой данных настроим в следующем шаге!
+    await message.reply(f"🎉 Поздравляем! Ты купил {car['name']}!\nТеперь твой доход увеличился на {car['bonus']:,} руб.!")
+
+# ==========================================
+
 # --- ФИНАЛЬНЫЙ АСИНХРОННЫЙ ЗАПУСК СЕРДЦА БОТА ---
 async def main():
     dp.include_router(router)
