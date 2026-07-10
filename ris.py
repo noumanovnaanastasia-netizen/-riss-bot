@@ -10,7 +10,7 @@ from aiogram.fsm.state import StatesGroup, State
 
 # --- СЕРДЦЕ БОТА: ГЛАВНЫЕ НАСТРОЙКИ ---
 TOKEN = "8962500881:AAGpPIMnGIZQErV2gI7kXDKxzE6UPchoDbw"  # 👈 Вставь сюда токен от @BotFather
-ADMIN_IDS = [7303801260]   # 👈 Замени 123456789 на свой реальный Telegram ID
+ADMIN_IDS = [7303801260,1808878208]   # 👈 Замени 123456789 на свой реальный Telegram ID
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
